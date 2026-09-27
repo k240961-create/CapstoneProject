@@ -9,10 +9,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     switch ($action) {
         case 'add':
+            $p = mff_get_product($productId);
+            if (!$p || ($p['stock'] ?? 0) <= 0) {
+                if (mff_wants_json()) {
+                    header('Content-Type: application/json');
+                    echo json_encode(['ok' => false, 'error' => 'Sorry, this product is currently out of stock.']);
+                    exit;
+                }
+                mff_set_flash('error', 'Sorry, that item is currently out of stock.');
+                header('Location: ' . ($_SERVER['HTTP_REFERER'] ?? BASE_URL . '/index.php'));
+                exit;
+            }
             cart_add($productId, max(1, (int) ($_POST['quantity'] ?? 1)));
             break;
         case 'update_qty':
-            cart_set_qty($productId, (int) ($_POST['quantity'] ?? 1));
+            $qty = max(0, (int) ($_POST['quantity'] ?? 1));
+            $p = mff_get_product($productId);
+            if ($p && $qty > ($p['stock'] ?? 0)) {
+                $qty = (int) ($p['stock'] ?? 0);
+            }
+            cart_set_qty($productId, $qty);
             break;
         case 'remove':
             cart_remove($productId);
@@ -31,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'quantity' => $_SESSION['cart'][$productId] ?? 0,
             'cart_count' => cart_count(),
             'subtotal_formatted' => mff_money($contents['subtotal']),
+            'delivery_fee_formatted' => mff_money($contents['delivery_fee']),
             'tax_formatted' => mff_money($contents['tax']),
             'total_formatted' => mff_money($contents['total']),
         ]);
@@ -90,6 +107,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
     <h2 class="section-title" style="font-size:1.75rem;">Order summary</h2>
     <div style="margin-top:1.25rem;border-top:1px solid #cfc4ac;border-bottom:1px solid #cfc4ac;padding:1.25rem 0;font-size:.875rem;">
       <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><strong data-cart-subtotal><?= mff_money($cart['subtotal']) ?></strong></div>
+      <div style="display:flex;justify-content:space-between;margin-top:.75rem;"><span>Delivery fee</span><strong data-cart-delivery><?= mff_money($cart['delivery_fee']) ?></strong></div>
       <div style="display:flex;justify-content:space-between;margin-top:.75rem;"><span>GST (10%)</span><strong data-cart-tax><?= mff_money($cart['tax']) ?></strong></div>
     </div>
     <div style="display:flex;justify-content:space-between;margin-top:1rem;font-size:1.15rem;font-weight:700;">

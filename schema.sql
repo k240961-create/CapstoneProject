@@ -58,12 +58,15 @@ CREATE TABLE orders (
     delivery_instructions TEXT NULL,
     payment_method ENUM('cash_on_delivery', 'credit_card', 'paypal') NOT NULL DEFAULT 'cash_on_delivery',
     subtotal DECIMAL(10,2) NOT NULL,
+    delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
     tax DECIMAL(10,2) NOT NULL,
     total DECIMAL(10,2) NOT NULL,
     status ENUM('pending', 'processing', 'out_for_delivery', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
     driver VARCHAR(120) NULL,
+    driver_id INT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (driver_id) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- 5. ORDER_ITEMS TABLE
@@ -78,7 +81,7 @@ CREATE TABLE order_items (
     FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
--- 6. FEEDBACK TABLE (SRS FR37, FR47)
+-- 6. FEEDBACK TABLE (SRS FR17, FR39)
 CREATE TABLE feedback (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_id INT NULL,
@@ -87,6 +90,7 @@ CREATE TABLE feedback (
     rating INT NOT NULL CHECK (rating BETWEEN 1 AND 5),
     comment TEXT NULL,
     sentiment VARCHAR(40) NULL DEFAULT 'positive',
+    admin_response TEXT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE SET NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL

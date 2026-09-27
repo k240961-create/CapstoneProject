@@ -50,14 +50,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     // 2. Delete Driver
     if ($action === 'delete_driver') {
         $driverId = (int) ($_POST['driver_id'] ?? 0);
-        $driverName = trim($_POST['driver_name'] ?? '');
 
         if ($pdo !== null && $driverId > 0) {
-            // Unassign orders currently held by this driver
-            if ($driverName !== '') {
-                $unassignStmt = $pdo->prepare('UPDATE orders SET driver = NULL WHERE driver = :driver AND status IN ("pending", "processing", "out_for_delivery")');
-                $unassignStmt->execute(['driver' => $driverName]);
-            }
+          mff_unassign_driver_orders($pdo, $driverId);
             // Delete user
             $delStmt = $pdo->prepare('DELETE FROM users WHERE id = :id AND role = "delivery"');
             $delStmt->execute(['id' => $driverId]);
@@ -74,9 +69,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($pdo !== null) {
     $drivers = $pdo->query("
         SELECT u.id, u.name, u.email, u.contact_number, u.created_at,
-               (SELECT COUNT(*) FROM orders o WHERE o.driver = u.name AND o.status IN ('processing', 'out_for_delivery')) AS active_deliveries,
-               (SELECT COUNT(*) FROM orders o WHERE o.driver = u.name AND o.status = 'delivered') AS completed_deliveries,
-               (SELECT COUNT(*) FROM orders o WHERE o.driver = u.name) AS total_deliveries
+               (SELECT COUNT(*) FROM orders o WHERE o.driver_id = u.id AND o.status IN ('processing', 'out_for_delivery')) AS active_deliveries,
+               (SELECT COUNT(*) FROM orders o WHERE o.driver_id = u.id AND o.status = 'delivered') AS completed_deliveries,
+               (SELECT COUNT(*) FROM orders o WHERE o.driver_id = u.id) AS total_deliveries
         FROM users u
         WHERE u.role = 'delivery'
         ORDER BY u.name ASC
@@ -84,10 +79,11 @@ if ($pdo !== null) {
 
     // Fetch active orders assigned per driver for quick drill-down
     $activeOrders = $pdo->query("
-        SELECT id, customer_name, delivery_address, status, driver, total
-        FROM orders
-        WHERE status IN ('processing', 'out_for_delivery') AND driver IS NOT NULL
-        ORDER BY created_at ASC
+        SELECT o.id, o.customer_name, o.delivery_address, o.status, u.name AS driver_name, o.total
+        FROM orders o
+        JOIN users u ON u.id = o.driver_id
+        WHERE o.status IN ('processing', 'out_for_delivery')
+        ORDER BY o.created_at ASC
     ")->fetchAll();
 } else {
     $drivers = [
@@ -204,7 +200,6 @@ require file_exists(__DIR__ . '/../../includes/header.php') ? __DIR__ . '/../../
                 <form method="post" action="<?= BASE_URL ?>/admin/manage_drivers.php" onsubmit="return confirm('Are you sure you want to remove driver <?= htmlspecialchars($driver['name']) ?>?');" style="margin:0;">
                   <input type="hidden" name="action" value="delete_driver">
                   <input type="hidden" name="driver_id" value="<?= (int) $driver['id'] ?>">
-                  <input type="hidden" name="driver_name" value="<?= htmlspecialchars($driver['name']) ?>">
                   <button type="submit" class="btn-outline" style="color:var(--tomato);border-color:var(--tomato);font-size:0.75rem;padding:0.25rem 0.5rem;">Remove</button>
                 </form>
               </div>

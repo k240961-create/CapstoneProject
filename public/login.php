@@ -14,12 +14,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $user = $stmt->fetch();
 
         if ($user && password_verify($password, $user['password_hash'])) {
+          session_regenerate_id(true);
             $_SESSION['user_id'] = $user['id'];
             $_SESSION['user_name'] = $user['name'];
             $_SESSION['user_email'] = $user['email'];
             $_SESSION['user_contact'] = $user['contact_number'] ?? '';
             mff_set_role($user['role']);
             mff_set_flash('success', 'Welcome back, ' . $user['name'] . ' (' . ucfirst($user['role']) . ').');
+
+            $redirect = $_GET['redirect'] ?? $_POST['redirect'] ?? '';
+            if (!empty($redirect) && str_starts_with($redirect, '/') && $user['role'] === 'customer') {
+                header('Location: ' . BASE_URL . $redirect);
+                exit;
+            }
 
             if (in_array($user['role'], ['admin', 'logistics_manager'], true)) {
                 header('Location: ' . BASE_URL . '/admin/dashboard.php');
@@ -36,11 +43,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $error = 'Incorrect email or password.';
     } else {
-        // No DB configured yet — accept any credentials in dev/demo mode
-        mff_set_role('customer');
-        mff_set_flash('info', 'Signed in (demo mode — no database connected yet).');
-        header('Location: ' . BASE_URL . '/index.php');
-        exit;
+        // Secure fail: Do not accept arbitrary credentials if database is offline (DR-029)
+        $error = 'Database service is currently unavailable. Please verify MySQL service status.';
     }
 }
 
@@ -55,7 +59,10 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
     <div class="flash flash--error" style="margin-top:1rem;max-width:none;"><?= htmlspecialchars($error) ?></div>
   <?php endif; ?>
 
-  <form method="post" action="<?= BASE_URL ?>/login.php" class="form-grid" style="grid-template-columns:1fr;margin-top:1.5rem;">
+  <form method="post" action="<?= BASE_URL ?>/login.php<?= !empty($_GET['redirect']) ? '?redirect=' . urlencode($_GET['redirect']) : '' ?>" class="form-grid" style="grid-template-columns:1fr;margin-top:1.5rem;">
+    <?php if (!empty($_GET['redirect']) || !empty($_POST['redirect'])): ?>
+      <input type="hidden" name="redirect" value="<?= htmlspecialchars($_GET['redirect'] ?? $_POST['redirect']) ?>">
+    <?php endif; ?>
     <div class="form-field">
       <label for="email">Email</label>
       <input id="email" name="email" type="email" required>
@@ -73,7 +80,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
 
   <div style="margin-top:1.5rem;border-top:1px solid var(--line);padding-top:1.25rem;">
     <p style="font-size:.75rem;font-weight:700;color:var(--leaf);margin-bottom:.5rem;">Role Testing Credentials (All Roles Seeded)</p>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;font-size:0.75rem;color:#56715f;line-height:1.5;background:#fdfcf9;border:1px solid var(--line);border-radius:0.75rem;padding:0.75rem;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%, 13rem),1fr));gap:.5rem;font-size:0.75rem;color:#56715f;line-height:1.5;background:#fdfcf9;border:1px solid var(--line);border-radius:0.75rem;padding:0.75rem;overflow-wrap:anywhere;">
       <div>🛡️ <strong>Admin:</strong><br><code>admin@maxifinefoods.com.au</code><br><span style="color:#8ba593;">Pass:</span> <code>admin123</code></div>
       <div>🚚 <strong>Logistics Mgr:</strong><br><code>logistics@maxifinefoods.com.au</code><br><span style="color:#8ba593;">Pass:</span> <code>logistics123</code></div>
       <div>📦 <strong>Inventory Mgr:</strong><br><code>inventory@maxifinefoods.com.au</code><br><span style="color:#8ba593;">Pass:</span> <code>inventory123</code></div>

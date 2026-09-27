@@ -15,7 +15,7 @@
           </div>
           <div class="pre-footer-text">
             <h4>Free Same-Day Delivery</h4>
-            <p>On all grocery orders over $60 placed before 2:00 PM</p>
+            <p>On grocery orders of $60 or more placed before 2:00 PM</p>
           </div>
         </div>
 
@@ -196,7 +196,6 @@
             <span class="pay-badge" title="Visa">💳 Visa</span>
             <span class="pay-badge" title="Mastercard">💳 Mastercard</span>
             <span class="pay-badge" title="American Express">💳 AMEX</span>
-            <span class="pay-badge" title="PayPal">🅿️ PayPal</span>
             <span class="pay-badge" title="Apple Pay">🍎 Apple Pay</span>
             <span class="pay-badge" title="Cash on Delivery">💵 Cash on Delivery</span>
           </div>
@@ -204,6 +203,37 @@
       </div>
     </div>
   </footer>
+
+  <?php if (in_array($currentRole ?? 'guest', ['guest', 'customer'], true)): ?>
+    <div class="store-assistant" data-store-assistant>
+      <section class="store-assistant__panel" data-assistant-panel id="store-assistant-panel" role="dialog" aria-labelledby="store-assistant-title" hidden>
+        <header class="store-assistant__header">
+          <div>
+            <h2 id="store-assistant-title">Maxi Assistant</h2>
+            <p data-assistant-status>AI replies when configured; quick store answers otherwise</p>
+          </div>
+          <button type="button" class="store-assistant__close" data-assistant-close aria-label="Close assistant">
+            <i data-lucide="x" class="icon-sm"></i>
+          </button>
+        </header>
+        <div class="store-assistant__messages" data-assistant-messages role="log" aria-live="polite" aria-relevant="additions text">
+          <p class="store-assistant__message store-assistant__message--assistant">Hi! Ask me about products, delivery, payments, returns, or where to track an order.</p>
+        </div>
+        <form class="store-assistant__form" data-assistant-form>
+          <label class="sr-only" for="store-assistant-input">Message Maxi Assistant</label>
+          <textarea id="store-assistant-input" data-assistant-input rows="2" maxlength="800" placeholder="Ask a question" required></textarea>
+          <button type="submit" class="btn-tomato" aria-label="Send message">
+            <i data-lucide="arrow-up" class="icon-sm"></i>
+          </button>
+        </form>
+        <p class="store-assistant__privacy">When AI is configured, your message is sent to our AI provider. Never include personal, password, or card details.</p>
+      </section>
+      <button type="button" class="store-assistant__trigger" data-assistant-toggle aria-expanded="false" aria-controls="store-assistant-panel">
+        <i data-lucide="message-circle" class="icon-sm"></i>
+        <span>Ask Maxi</span>
+      </button>
+    </div>
+  <?php endif; ?>
 
   <div id="toast" class="toast" aria-live="polite"></div>
 </div>

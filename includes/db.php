@@ -430,7 +430,7 @@ function mff_orders_fallback(): array
             'id' => 2048, 'customer_name' => 'Emma Wilson', 'contact_number' => '0412 345 678',
             'delivery_address' => '42 Riverside Drive, Parramatta NSW 2150',
             'delivery_instructions' => 'Leave with concierge if not home.',
-            'payment_method' => 'cash_on_delivery', 'subtotal' => 12.98, 'tax' => 1.30,
+            'payment_method' => 'cash_on_delivery', 'subtotal' => 12.98, 'delivery_fee' => 0, 'tax' => 1.30,
             'total' => 14.28, 'status' => 'out_for_delivery', 'driver' => 'Chris Allen',
             'created_at' => '2026-08-10 09:15:00',
             'items' => [
@@ -442,7 +442,7 @@ function mff_orders_fallback(): array
             'id' => 2049, 'customer_name' => 'Noah Brown', 'contact_number' => '0433 221 998',
             'delivery_address' => '8 Harbord Street, Marrickville NSW 2204',
             'delivery_instructions' => '',
-            'payment_method' => 'credit_card', 'subtotal' => 26.40, 'tax' => 2.64,
+            'payment_method' => 'credit_card', 'subtotal' => 26.40, 'delivery_fee' => 0, 'tax' => 2.64,
             'total' => 29.04, 'status' => 'processing', 'driver' => null,
             'created_at' => '2026-08-10 10:02:00',
             'items' => [
@@ -478,6 +478,7 @@ function mff_db(): ?PDO
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
+            PDO::ATTR_TIMEOUT => 1,
         ]);
         $GLOBALS['mff_db_live'] = true;
         mff_init_db_schema($pdo, 'mysql');
@@ -557,12 +558,26 @@ function mff_init_db_schema(PDO $pdo, string $driver = 'sqlite'): void
         delivery_instructions TEXT NULL,
         payment_method VARCHAR(40) NOT NULL DEFAULT 'cash_on_delivery',
         subtotal DECIMAL(10,2) NOT NULL,
+        delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0,
         tax DECIMAL(10,2) NOT NULL,
         total DECIMAL(10,2) NOT NULL,
         status VARCHAR(40) NOT NULL DEFAULT 'pending',
         driver VARCHAR(120) NULL,
+        driver_id INTEGER NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )");
+
+    try {
+        $pdo->query('SELECT delivery_fee FROM orders LIMIT 0');
+    } catch (PDOException $e) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN delivery_fee DECIMAL(10,2) NOT NULL DEFAULT 0');
+    }
+
+    try {
+        $pdo->query('SELECT driver_id FROM orders LIMIT 0');
+    } catch (PDOException $e) {
+        $pdo->exec('ALTER TABLE orders ADD COLUMN driver_id INTEGER NULL');
+    }
 
     $pdo->exec("CREATE TABLE IF NOT EXISTS order_items (
         id {$autoInc},
@@ -572,6 +587,47 @@ function mff_init_db_schema(PDO $pdo, string $driver = 'sqlite'): void
         price DECIMAL(10,2) NOT NULL,
         quantity INTEGER NOT NULL
     )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS categories (
+        id {$autoInc},
+        name VARCHAR(80) NOT NULL UNIQUE,
+        description TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    $pdo->exec("CREATE TABLE IF NOT EXISTS feedback (
+        id {$autoInc},
+        order_id INTEGER NULL,
+        user_id INTEGER NULL,
+        customer_name VARCHAR(120) NOT NULL,
+        rating INTEGER NOT NULL,
+        comment TEXT NULL,
+        sentiment VARCHAR(40) NULL DEFAULT 'positive',
+        admin_response TEXT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )");
+
+    try {
+        $pdo->query('SELECT admin_response FROM feedback LIMIT 0');
+    } catch (PDOException $e) {
+        $pdo->exec('ALTER TABLE feedback ADD COLUMN admin_response TEXT NULL');
+    }
+
+    // Seed default categories if empty
+    $catCount = (int) $pdo->query('SELECT COUNT(*) FROM categories')->fetchColumn();
+    if ($catCount === 0) {
+        $insertCat = $pdo->prepare('INSERT INTO categories (name, description) VALUES (:name, :desc)');
+        $seedCats = [
+            ['Produce', 'Fresh fruits and seasonal farm vegetables'],
+            ['Bakery', 'Artisan breads, pastries, and rolls baked daily'],
+            ['Meat & Seafood', 'Locally sourced prime meats and fresh catches'],
+            ['Dairy', 'Fresh farm milk, cheeses, butter and yoghurts'],
+            ['Beverages', 'Cold pressed juices, craft sodas, teas and coffee'],
+        ];
+        foreach ($seedCats as $c) {
+            $insertCat->execute(['name' => $c[0], 'desc' => $c[1]]);
+        }
+    }
 
     // Seed products if empty
     $prodCount = (int) $pdo->query('SELECT COUNT(*) FROM products')->fetchColumn();
@@ -597,8 +653,7 @@ function mff_init_db_schema(PDO $pdo, string $driver = 'sqlite'): void
         'INSERT INTO users (name, email, password_hash, role, contact_number, created_at)
          VALUES (:name, :email, :hash, :role, :contact, CURRENT_TIMESTAMP)'
     );
-    $checkUser = $pdo->prepare('SELECT id, role FROM users WHERE email = :email');
-    $updateUser = $pdo->prepare('UPDATE users SET role = :role, password_hash = :hash, name = :name WHERE email = :email');
+    $checkUser = $pdo->prepare('SELECT id FROM users WHERE email = :email');
 
     $seedUsers = [
         ['Admin User', 'admin@maxifinefoods.com.au', password_hash('admin123', PASSWORD_DEFAULT), 'admin', '1800 629 436'],
@@ -617,10 +672,6 @@ function mff_init_db_schema(PDO $pdo, string $driver = 'sqlite'): void
             $insertUser->execute([
                 'name' => $u[0], 'email' => $u[1], 'hash' => $u[2], 'role' => $u[3], 'contact' => $u[4],
             ]);
-        } else {
-            $updateUser->execute([
-                'role' => $u[3], 'hash' => $u[2], 'name' => $u[0], 'email' => $u[1],
-            ]);
         }
     }
 
@@ -629,27 +680,75 @@ function mff_init_db_schema(PDO $pdo, string $driver = 'sqlite'): void
     if ($orderCount === 0) {
         $pdo->exec(
             "INSERT INTO orders (id, user_id, customer_name, contact_number, delivery_address, delivery_instructions, payment_method, subtotal, tax, total, status, driver, created_at)
-             VALUES (2048, 4, 'Emma Wilson', '0412 345 678', '42 Riverside Drive, Parramatta NSW 2150', 'Leave with concierge if not home.', 'cash_on_delivery', 13.38, 1.34, 14.72, 'out_for_delivery', 'Chris Allen', '2026-08-20 09:15:00')"
+             VALUES (2048, 7, 'Emma Wilson', '0412 345 678', '42 Riverside Drive, Parramatta NSW 2150', 'Leave with concierge if not home.', 'cash_on_delivery', 13.38, 1.34, 14.72, 'delivered', 'Chris Allen', '2026-08-20 09:15:00')"
         );
         $pdo->exec(
             "INSERT INTO orders (id, user_id, customer_name, contact_number, delivery_address, delivery_instructions, payment_method, subtotal, tax, total, status, driver, created_at)
-             VALUES (2049, 4, 'Noah Brown', '0433 221 998', '8 Harbord Street, Marrickville NSW 2204', 'Ring the doorbell twice.', 'credit_card', 26.40, 2.64, 29.04, 'processing', 'Jordan Lee', '2026-08-21 10:02:00')"
+             VALUES (2049, 7, 'Noah Brown', '0433 221 998', '8 Harbord Street, Marrickville NSW 2204', 'Ring the doorbell twice.', 'credit_card', 26.40, 2.64, 29.04, 'processing', 'Jordan Lee', '2026-08-21 10:02:00')"
         );
         $pdo->exec("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (2048, 1, 'Organic Hass Avocados', 2.49, 2)");
         $pdo->exec("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (2048, 31, 'Free-Range Large Eggs 12pk', 8.40, 1)");
         $pdo->exec("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (2049, 21, 'Atlantic Salmon Fillet 500g', 15.50, 1)");
         $pdo->exec("INSERT INTO order_items (order_id, product_id, name, price, quantity) VALUES (2049, 11, 'Country Sourdough Loaf', 5.90, 1)");
     }
+
+    $pdo->exec("UPDATE orders
+        SET driver_id = (
+            SELECT MIN(id) FROM users
+            WHERE users.name = orders.driver AND users.role = 'delivery'
+            HAVING COUNT(*) = 1
+        )
+        WHERE driver_id IS NULL AND driver IS NOT NULL");
+
+    // Seed default sample feedback if empty
+    $fbCount = (int) $pdo->query('SELECT COUNT(*) FROM feedback')->fetchColumn();
+    if ($fbCount === 0) {
+        $pdo->exec("INSERT INTO feedback (order_id, user_id, customer_name, rating, comment, sentiment, admin_response, created_at)
+                    VALUES (2048, 7, 'Emma Wilson', 5, 'Avocados arrived perfectly ripe and the eggs were intact. Very fast delivery!', 'positive', 'Thank you Emma, so glad you enjoyed them!', '2026-08-20 11:30:00')");
+        $pdo->exec("INSERT INTO feedback (order_id, user_id, customer_name, rating, comment, sentiment, admin_response, created_at)
+                    VALUES (2049, 7, 'Noah Brown', 4, 'Great sourdough bread and good packaging.', 'positive', NULL, '2026-08-21 12:15:00')");
+    }
 }
 
-/** Fetch all products from active database. */
-function mff_get_products(): array
+/** Decrement stock only when enough units remain; callers should wrap this in a transaction. */
+function mff_decrement_stock(PDO $pdo, int $productId, int $quantity): bool
+{
+    if ($productId < 1 || $quantity < 1) {
+        return false;
+    }
+
+    $stmt = $pdo->prepare('UPDATE products SET stock = stock - :quantity WHERE id = :id AND stock >= :minimum');
+    $stmt->execute(['quantity' => $quantity, 'id' => $productId, 'minimum' => $quantity]);
+    return $stmt->rowCount() === 1;
+}
+
+function mff_unassign_driver_orders(PDO $pdo, int $driverId): void
+{
+    if ($driverId < 1) {
+        return;
+    }
+
+    $stmt = $pdo->prepare('UPDATE orders SET driver = NULL, driver_id = NULL WHERE driver_id = :driver_id');
+    $stmt->execute(['driver_id' => $driverId]);
+}
+
+/** Fetch all products from active database. Automatically hides out-of-stock items for customer storefront (SRS FR11 / FR41). */
+function mff_get_products(bool $includeOutOfStock = true): array
 {
     $pdo = mff_db();
     if ($pdo === null) {
-        return mff_products_fallback();
+        $prods = mff_products_fallback();
+        if (!$includeOutOfStock) {
+            $prods = array_filter($prods, fn($p) => ($p['stock'] ?? 0) > 0);
+        }
+        return array_values($prods);
     }
-    $stmt = $pdo->query('SELECT * FROM products ORDER BY category, name');
+    $sql = 'SELECT * FROM products';
+    if (!$includeOutOfStock) {
+        $sql .= ' WHERE stock > 0';
+    }
+    $sql .= ' ORDER BY category, name';
+    $stmt = $pdo->query($sql);
     return $stmt->fetchAll();
 }
 
@@ -670,4 +769,121 @@ function mff_get_product(int $id): ?array
     $row = $stmt->fetch();
     return $row ?: null;
 }
+
+/** Fetch all product categories from active database (SRS FR8 / TC-INV-06). */
+function mff_get_categories(): array
+{
+    $pdo = mff_db();
+    if ($pdo === null) {
+        return ['Produce', 'Bakery', 'Meat & Seafood', 'Dairy', 'Beverages'];
+    }
+    $cats = $pdo->query('SELECT DISTINCT name FROM categories UNION SELECT DISTINCT category AS name FROM products ORDER BY name ASC')->fetchAll(PDO::FETCH_COLUMN);
+    return !empty($cats) ? $cats : ['Produce', 'Bakery', 'Meat & Seafood', 'Dairy', 'Beverages'];
+}
+
+/** Add a new product category (SRS FR8 / TC-INV-06). */
+function mff_add_category(string $name, string $description = ''): bool
+{
+    $name = trim($name);
+    if ($name === '') return false;
+    $pdo = mff_db();
+    if ($pdo === null) return false;
+    try {
+        $stmt = $pdo->prepare('INSERT INTO categories (name, description) VALUES (:name, :desc)');
+        return $stmt->execute(['name' => $name, 'desc' => trim($description)]);
+    } catch (Exception $e) {
+        return false;
+    }
+}
+
+/** Fetch a single order with items and feedback. */
+function mff_get_order(int $id): ?array
+{
+    $pdo = mff_db();
+    if ($pdo === null) {
+        foreach (mff_orders_fallback() as $o) {
+            if ($o['id'] === $id) return $o;
+        }
+        return null;
+    }
+    $stmt = $pdo->prepare('SELECT * FROM orders WHERE id = :id');
+    $stmt->execute(['id' => $id]);
+    $order = $stmt->fetch();
+    if (!$order) return null;
+
+    $itemStmt = $pdo->prepare('SELECT * FROM order_items WHERE order_id = :id');
+    $itemStmt->execute(['id' => $id]);
+    $order['items'] = $itemStmt->fetchAll();
+
+    $fbStmt = $pdo->prepare('SELECT * FROM feedback WHERE order_id = :id');
+    $fbStmt->execute(['id' => $id]);
+    $order['feedback'] = $fbStmt->fetch() ?: null;
+
+    return $order;
+}
+
+/** Fetch all customer feedback (SRS FR39 / TC-SUP-02). */
+function mff_get_feedback(): array
+{
+    $pdo = mff_db();
+    if ($pdo === null) {
+        return [
+            [
+                'id' => 1,
+                'order_id' => 2048,
+                'customer_name' => 'Emma Wilson',
+                'rating' => 5,
+                'comment' => 'Avocados arrived perfectly ripe and the eggs were intact. Very fast delivery!',
+                'sentiment' => 'positive',
+                'admin_response' => 'Thank you Emma, so glad you enjoyed them!',
+                'created_at' => '2026-08-20 11:30:00',
+            ]
+        ];
+    }
+    $stmt = $pdo->query('SELECT f.*, o.total, o.created_at AS order_date FROM feedback f LEFT JOIN orders o ON f.order_id = o.id ORDER BY f.created_at DESC');
+    return $stmt->fetchAll();
+}
+
+/** Submit customer rating and review for delivered order (SRS FR17 / TC12). */
+function mff_submit_feedback(int $orderId, ?int $userId, string $customerName, int $rating, string $comment): bool
+{
+    $pdo = mff_db();
+    if ($pdo === null) return false;
+
+    $rating = max(1, min(5, $rating));
+    $sentiment = 'neutral';
+    if ($rating >= 4) {
+        $sentiment = 'positive';
+    } elseif ($rating <= 2) {
+        $sentiment = 'negative';
+    }
+
+    $check = $pdo->prepare('SELECT id FROM feedback WHERE order_id = :oid');
+    $check->execute(['oid' => $orderId]);
+    if ($check->fetch()) {
+        $stmt = $pdo->prepare('UPDATE feedback SET rating = :rating, comment = :comment, sentiment = :sentiment, created_at = CURRENT_TIMESTAMP WHERE order_id = :oid');
+        return $stmt->execute(['rating' => $rating, 'comment' => $comment, 'sentiment' => $sentiment, 'oid' => $orderId]);
+    }
+
+    $stmt = $pdo->prepare('INSERT INTO feedback (order_id, user_id, customer_name, rating, comment, sentiment, created_at) VALUES (:oid, :uid, :name, :rating, :comment, :sentiment, CURRENT_TIMESTAMP)');
+    return $stmt->execute([
+        'oid' => $orderId,
+        'uid' => $userId,
+        'name' => $customerName,
+        'rating' => $rating,
+        'comment' => $comment,
+        'sentiment' => $sentiment,
+    ]);
+}
+
+/** Customer Support / Admin response to customer feedback (SRS FR38 / TC-SUP-03). */
+function mff_respond_feedback(int $feedbackId, string $response): bool
+{
+    $pdo = mff_db();
+    if ($pdo === null) return false;
+    $stmt = $pdo->prepare('UPDATE feedback SET admin_response = :resp WHERE id = :id');
+    return $stmt->execute(['resp' => trim($response), 'id' => $feedbackId]);
+}
+
+
 

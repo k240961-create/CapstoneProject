@@ -30,11 +30,31 @@ if (!defined('BASE_URL')) {
 }
 
 if (session_status() === PHP_SESSION_NONE) {
+    $isHttps = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== '' && strtolower($_SERVER['HTTPS']) !== 'off';
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path' => '/',
+        'secure' => $isHttps,
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
-
-
+// 15-minute idle session timeout (SRS NFR11 / TC13-14 / TC-SUP-07)
+if (isset($_SESSION['user_id'])) {
+    if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity'] > 900)) {
+        // Expired after 15 minutes of inactivity
+        $savedCart = $_SESSION['cart'] ?? [];
+        $_SESSION = [];
+        $_SESSION['cart'] = $savedCart;
+        $_SESSION['role'] = 'guest';
+        mff_set_flash('info', 'Your session has expired after 15 minutes of inactivity. Please log in again.');
+        header('Location: ' . BASE_URL . '/login.php');
+        exit;
+    }
+    $_SESSION['last_activity'] = time();
+}
 
 if (!isset($_SESSION['cart']) || !is_array($_SESSION['cart'])) {
     $_SESSION['cart'] = []; // [product_id => quantity]
@@ -45,7 +65,6 @@ foreach ($_SESSION['cart'] as $mffCartKey => $mffCartVal) {
         break;
     }
 }
-
 
 unset($mffCartKey, $mffCartVal);
 if (!isset($_SESSION['role'])) {
@@ -63,6 +82,8 @@ const MFF_ROLES = [
     'support_staff',
     'admin'
 ];
+const MFF_FREE_DELIVERY_THRESHOLD = 60.00;
+const MFF_DELIVERY_FEE = 8.50;
 
 function mff_role(): string
 {
@@ -154,6 +175,20 @@ function cart_count(): int
     return array_sum(array_map(fn($q) => is_numeric($q) ? (int) $q : 0, $_SESSION['cart']));
 }
 
+function mff_cart_totals(float $subtotal): array
+{
+    $subtotal = round(max(0, $subtotal), 2);
+    $deliveryFee = $subtotal > 0 && $subtotal < MFF_FREE_DELIVERY_THRESHOLD ? MFF_DELIVERY_FEE : 0.0;
+    $tax = round(($subtotal + $deliveryFee) * 0.10, 2);
+
+    return [
+        'subtotal' => $subtotal,
+        'delivery_fee' => $deliveryFee,
+        'tax' => $tax,
+        'total' => round($subtotal + $deliveryFee + $tax, 2),
+    ];
+}
+
 /**
  * Resolves the cart against the live product catalog (or fallback) and
  * returns line items plus totals. Silently drops any product id that no
@@ -185,15 +220,9 @@ function cart_contents(): array
         ];
     }
 
-    $tax = round($subtotal * 0.10, 2); // 10% GST
-    $total = round($subtotal + $tax, 2);
-
     return [
         'items' => $items,
-        'subtotal' => round($subtotal, 2),
-        'tax' => $tax,
-        'total' => $total,
-    ];
+    ] + mff_cart_totals($subtotal);
 }
 
 /** True if the request is an XHR / fetch() call expecting JSON back. */

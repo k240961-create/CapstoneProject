@@ -10,7 +10,6 @@ $cartCount = cart_count();
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title><?= isset($pageTitle) ? htmlspecialchars($pageTitle) . ' | ' : '' ?>Maxi Fine Foods</title>
-  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="<?= BASE_URL ?>/assets/style.css?v=<?= time() ?>">
@@ -19,7 +18,7 @@ $cartCount = cart_count();
 <div class="app-shell">
 
   <div class="announcement-bar">
-    <span>Free delivery on orders over $50 &middot; Same-day slots available</span>
+    <span>Free delivery on orders of $60 or more &middot; Same-day slots available</span>
   </div>
 
   <header class="site-header">
@@ -37,7 +36,7 @@ $cartCount = cart_count();
           <a class="cart-button" href="<?= BASE_URL ?>/cart.php">
             <i data-lucide="shopping-bag" class="icon-sm"></i>
             <span>Cart</span>
-            <span class="cart-count" aria-live="polite"><?= $cartCount ?></span>
+            <span class="cart-count" data-cart-count aria-live="polite"><?= $cartCount ?></span>
           </a>
         <?php elseif ($currentRole === 'customer'): ?>
           <a class="nav-action <?= ($activeNav ?? '') === 'shop' ? 'nav-action--active' : '' ?>" href="<?= BASE_URL ?>/index.php">Shop</a>
@@ -48,7 +47,7 @@ $cartCount = cart_count();
           <a class="cart-button" href="<?= BASE_URL ?>/cart.php">
             <i data-lucide="shopping-bag" class="icon-sm"></i>
             <span>Cart</span>
-            <span class="cart-count" aria-live="polite"><?= $cartCount ?></span>
+            <span class="cart-count" data-cart-count aria-live="polite"><?= $cartCount ?></span>
           </a>
           <a class="nav-action" href="<?= BASE_URL ?>/logout.php" style="color:var(--tomato);">Log out</a>
         <?php elseif ($currentRole === 'delivery'): ?>

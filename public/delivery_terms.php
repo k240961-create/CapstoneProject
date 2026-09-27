@@ -22,7 +22,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
       <div style="background:#f4efe6;border:1px solid #dfd4bf;padding:1.25rem;border-radius:1rem;">
         <i data-lucide="truck" style="color:var(--leaf);margin-bottom:.5rem;width:28px;height:28px;"></i>
         <h3 style="font-size:1.05rem;font-weight:700;color:var(--ink);margin:0;">Free Delivery</h3>
-        <p style="font-size:.85rem;color:#56715f;margin-top:.25rem;">Complimentary on all orders over $60. Flat $8.50 for smaller orders.</p>
+        <p style="font-size:.85rem;color:#56715f;margin-top:.25rem;">Complimentary on orders of $60 or more. Flat $8.50 when the product subtotal is below $60.</p>
       </div>
       <div style="background:#f4efe6;border:1px solid #dfd4bf;padding:1.25rem;border-radius:1rem;">
         <i data-lucide="clock" style="color:var(--gold);margin-bottom:.5rem;width:28px;height:28px;"></i>

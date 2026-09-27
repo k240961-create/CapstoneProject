@@ -6,7 +6,7 @@ $userRole = mff_role();
 
 $pdo = mff_db();
 if ($pdo !== null) {
-    $orders = $pdo->query('SELECT * FROM orders ORDER BY created_at DESC LIMIT 10')->fetchAll();
+  $orders = $pdo->query('SELECT o.*, u.name AS driver_name FROM orders o LEFT JOIN users u ON u.id = o.driver_id ORDER BY o.created_at DESC LIMIT 10')->fetchAll();
     $totalOrders = (int) $pdo->query('SELECT COUNT(*) FROM orders')->fetchColumn();
     $totalRevenue = (float) $pdo->query('SELECT COALESCE(SUM(total), 0) FROM orders WHERE status != "cancelled"')->fetchColumn();
     $pendingOrders = (int) $pdo->query('SELECT COUNT(*) FROM orders WHERE status = "pending"')->fetchColumn();
@@ -21,8 +21,8 @@ if ($pdo !== null) {
 
     $drivers = $pdo->query("
         SELECT u.id, u.name, u.email, u.contact_number, u.created_at,
-               (SELECT COUNT(*) FROM orders o WHERE o.driver = u.name AND o.status IN ('processing', 'out_for_delivery')) AS active_deliveries,
-               (SELECT COUNT(*) FROM orders o WHERE o.driver = u.name AND o.status = 'delivered') AS completed_deliveries
+               (SELECT COUNT(*) FROM orders o WHERE o.driver_id = u.id AND o.status IN ('processing', 'out_for_delivery')) AS active_deliveries,
+               (SELECT COUNT(*) FROM orders o WHERE o.driver_id = u.id AND o.status = 'delivered') AS completed_deliveries
         FROM users u
         WHERE u.role = 'delivery'
         ORDER BY u.name ASC
@@ -335,8 +335,8 @@ require file_exists(__DIR__ . '/../../includes/header.php') ? __DIR__ . '/../../
           <td><?= htmlspecialchars($order['customer_name']) ?></td>
           <td><span class="status status-<?= htmlspecialchars($order['status']) ?>"><?= htmlspecialchars($statusLabels[$order['status']] ?? $order['status']) ?></span></td>
           <td>
-            <?php if (!empty($order['driver'])): ?>
-              <span style="font-weight:600;color:var(--ink);">🚚 <?= htmlspecialchars($order['driver']) ?></span>
+            <?php if (($pdo === null && !empty($order['driver'])) || (!empty($order['driver_id']) && !empty($order['driver_name']))): ?>
+              <span style="font-weight:600;color:var(--ink);">🚚 <?= htmlspecialchars($pdo === null ? $order['driver'] : $order['driver_name']) ?></span>
             <?php else: ?>
               <span style="color:#c84634;font-size:0.825rem;font-weight:600;">Unassigned</span>
             <?php endif; ?>

@@ -47,6 +47,7 @@ function initQtySteppers() {
 
           document.querySelectorAll('[data-cart-count]').forEach(el => flashEl(el, data.cart_count));
           document.querySelectorAll('[data-cart-subtotal]').forEach(el => flashEl(el, data.subtotal_formatted));
+          document.querySelectorAll('[data-cart-delivery]').forEach(el => flashEl(el, data.delivery_fee_formatted));
           document.querySelectorAll('[data-cart-tax]').forEach(el => flashEl(el, data.tax_formatted));
           document.querySelectorAll('[data-cart-total]').forEach(el => flashEl(el, data.total_formatted));
           
@@ -115,15 +116,17 @@ function initCatalogueFilters() {
 
   const apply = () => {
     const query = (search?.value || '').toLowerCase().trim();
-    const activeCategory = document.querySelector('.filter-button--active')?.dataset.category || 'specials';
+    const activeCategory = document.querySelector('.filter-button--active')?.dataset.category || 'all';
     let visible = 0;
     cards.forEach(card => {
       const isSpecial = card.dataset.special === '1';
       let matchesCategory = false;
-      if (activeCategory === 'specials') {
+      if (activeCategory === 'all') {
+        matchesCategory = true;
+      } else if (activeCategory === 'specials') {
         matchesCategory = isSpecial;
       } else {
-        matchesCategory = card.dataset.category === activeCategory;
+        matchesCategory = (card.dataset.category || '').toLowerCase() === activeCategory.toLowerCase();
       }
       const matchesSearch = (card.dataset.search || '').includes(query);
       const show = matchesCategory && matchesSearch;
@@ -177,7 +180,7 @@ function initAddToCart() {
       btn.disabled = true;
 
       try {
-        const res = await fetch(form.action, {
+        const res = await fetch(form.getAttribute('action'), {
           method: 'POST',
           headers: { 'X-Requested-With': 'XMLHttpRequest' },
           body: new FormData(form)
@@ -202,6 +205,7 @@ function initAddToCart() {
           };
           document.querySelectorAll('[data-cart-count]').forEach(el => flashEl(el, data.cart_count));
           document.querySelectorAll('[data-cart-subtotal]').forEach(el => flashEl(el, data.subtotal_formatted));
+          document.querySelectorAll('[data-cart-delivery]').forEach(el => flashEl(el, data.delivery_fee_formatted));
           document.querySelectorAll('[data-cart-tax]').forEach(el => flashEl(el, data.tax_formatted));
           document.querySelectorAll('[data-cart-total]').forEach(el => flashEl(el, data.total_formatted));
         } else {
@@ -269,6 +273,78 @@ function initHeroSlideshow() {
   startTimer();
 }
 
+function initStoreAssistant() {
+  const widget = document.querySelector('[data-store-assistant]');
+  if (!widget) return;
+
+  const toggle = widget.querySelector('[data-assistant-toggle]');
+  const close = widget.querySelector('[data-assistant-close]');
+  const panel = widget.querySelector('[data-assistant-panel]');
+  const form = widget.querySelector('[data-assistant-form]');
+  const input = widget.querySelector('[data-assistant-input]');
+  const messages = widget.querySelector('[data-assistant-messages]');
+  const status = widget.querySelector('[data-assistant-status]');
+  const history = [];
+
+  const setOpen = (open) => {
+    panel.hidden = !open;
+    toggle.setAttribute('aria-expanded', String(open));
+    if (open) input.focus();
+  };
+
+  const appendMessage = (role, text) => {
+    const item = document.createElement('p');
+    item.className = `store-assistant__message store-assistant__message--${role}`;
+    item.textContent = text;
+    messages.appendChild(item);
+    messages.scrollTop = messages.scrollHeight;
+    return item;
+  };
+
+  toggle.addEventListener('click', () => setOpen(panel.hidden));
+  close.addEventListener('click', () => setOpen(false));
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const message = input.value.trim();
+    if (!message) return;
+
+    appendMessage('user', message);
+    history.push({ role: 'user', content: message });
+    input.value = '';
+    const pending = appendMessage('assistant', 'Thinking...');
+    const sendButton = form.querySelector('button[type="submit"]');
+    sendButton.disabled = true;
+
+    try {
+      const response = await fetch(`${window.MFF_BASE_URL || ''}/chat.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ message, history: history.slice(0, -1).slice(-6) })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.answer) throw new Error(data.error || 'Assistant request failed.');
+
+      pending.textContent = data.answer;
+      history.push({ role: 'assistant', content: data.answer });
+      status.textContent = data.mode === 'ai' ? 'AI shopping help' : 'Quick store answers';
+    } catch (error) {
+      pending.textContent = 'I could not reach the assistant just now. Please try again or contact Customer Care at 1800 629 436.';
+      status.textContent = 'Assistant temporarily unavailable';
+    } finally {
+      sendButton.disabled = false;
+      input.focus();
+      messages.scrollTop = messages.scrollHeight;
+    }
+  });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   if (window.lucide) lucide.createIcons();
   initQtySteppers();
@@ -276,6 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initAddToCart();
   initImageFallbacks();
   initHeroSlideshow();
+  initStoreAssistant();
 
   // Auto-dismiss server-rendered flash messages after a few seconds.
 

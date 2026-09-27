@@ -69,6 +69,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if (strlen($newPassword) < 6) {
                         $errors[] = 'New password must be at least 6 characters.';
                     } else {
+                      $currentRoleStmt = $pdo->prepare('SELECT role FROM users WHERE id = :id');
+                      $currentRoleStmt->execute(['id' => $userId]);
+                      if ($currentRoleStmt->fetchColumn() === 'delivery' && $role !== 'delivery') {
+                        mff_unassign_driver_orders($pdo, $userId);
+                      }
                         $stmt = $pdo->prepare('UPDATE users SET name = :name, email = :email, contact_number = :contact, role = :role, password_hash = :hash WHERE id = :id');
                         $stmt->execute([
                             'name' => $name,
@@ -83,6 +88,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         exit;
                     }
                 } else {
+                  $currentRoleStmt = $pdo->prepare('SELECT role FROM users WHERE id = :id');
+                  $currentRoleStmt->execute(['id' => $userId]);
+                  if ($currentRoleStmt->fetchColumn() === 'delivery' && $role !== 'delivery') {
+                    mff_unassign_driver_orders($pdo, $userId);
+                  }
                     $stmt = $pdo->prepare('UPDATE users SET name = :name, email = :email, contact_number = :contact, role = :role WHERE id = :id');
                     $stmt->execute([
                         'name' => $name,
@@ -107,6 +117,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($userId === $currentLoggedInId) {
             mff_set_flash('error', 'You cannot delete your own active admin account.');
         } elseif ($pdo !== null && $userId > 0) {
+          $roleStmt = $pdo->prepare('SELECT role FROM users WHERE id = :id');
+          $roleStmt->execute(['id' => $userId]);
+          if ($roleStmt->fetchColumn() === 'delivery') {
+            mff_unassign_driver_orders($pdo, $userId);
+          }
             $stmt = $pdo->prepare('DELETE FROM users WHERE id = :id');
             $stmt->execute(['id' => $userId]);
             mff_set_flash('success', 'User account successfully deleted.');

@@ -49,6 +49,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
     <ul style="padding-left:1.5rem;margin-top:.5rem;">
       <li><strong>Delivery Drivers:</strong> Assigned drivers receive your delivery address, recipient name, and drop-off instructions to complete delivery.</li>
       <li><strong>Payment Processors:</strong> Encrypted financial communication for transaction clearance.</li>
+      <li><strong>AI Assistant:</strong> If AI mode is configured, the message you submit and public product context are sent to the configured AI provider to generate a reply. Do not include personal account, password, or payment-card details. When AI is not configured or unavailable, the assistant uses local FAQ answers.</li>
       <li><strong>Cloud Infrastructure:</strong> Secure Australian-based servers complying with strict data security standards.</li>
     </ul>
 

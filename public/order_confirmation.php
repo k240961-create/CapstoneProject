@@ -47,6 +47,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
     </div>
     <div style="margin-top:1.25rem;border-top:1px solid #cfc4ac;padding-top:1rem;font-size:.875rem;">
       <div style="display:flex;justify-content:space-between;"><span>Subtotal</span><strong><?= mff_money($order['subtotal']) ?></strong></div>
+      <div style="display:flex;justify-content:space-between;margin-top:.5rem;"><span>Delivery fee</span><strong><?= mff_money($order['delivery_fee'] ?? 0) ?></strong></div>
       <div style="display:flex;justify-content:space-between;margin-top:.5rem;"><span>GST</span><strong><?= mff_money($order['tax']) ?></strong></div>
       <div style="display:flex;justify-content:space-between;margin-top:.75rem;font-size:1.05rem;font-weight:700;"><span>Total</span><span><?= mff_money($order['total']) ?></span></div>
     </div>

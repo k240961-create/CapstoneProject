@@ -34,7 +34,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
         <span>🚚 How much is delivery, and is there a free delivery threshold?</span>
       </summary>
       <div style="margin-top:1rem;color:#2c4234;font-size:.92rem;line-height:1.6;border-top:1px solid var(--oat);padding-top:.75rem;">
-        Delivery is completely <strong>FREE on all orders over $60</strong>! For smaller basket orders under $60, a standard flat fee of $8.50 is applied at checkout.
+        Delivery is completely <strong>FREE on orders of $60 or more</strong>! For product subtotals below $60, a flat $8.50 delivery fee is added at checkout.
       </div>
     </details>
 
@@ -54,7 +54,7 @@ require file_exists(__DIR__ . '/../includes/header.php') ? __DIR__ . '/../includ
         <span>💳 What payment methods do you accept?</span>
       </summary>
       <div style="margin-top:1rem;color:#2c4234;font-size:.92rem;line-height:1.6;border-top:1px solid var(--oat);padding-top:.75rem;">
-        We accept Visa, Mastercard, American Express, PayPal, Apple Pay, and <strong>Cash on Delivery (COD)</strong> upon driver arrival.
+        We accept Visa, Mastercard, American Express, Apple Pay, and <strong>Cash on Delivery (COD)</strong> upon driver arrival.
       </div>
     </details>
 

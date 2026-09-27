@@ -43,10 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
         } else {
-            mff_set_role($role);
-            mff_set_flash('info', 'Account created (demo mode — no database connected yet).');
-            header('Location: ' . BASE_URL . '/index.php');
-            exit;
+            $errors[] = 'Database service is temporarily unavailable. Please verify MySQL service status.';
         }
     }
 }
